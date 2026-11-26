@@ -69,11 +69,15 @@ def main():
           all(w.startswith("%") for w in win), str(win))
 
     print("\n== 2. find_browser 各平台不炸")
-    # 本机是 Windows，Mac/Linux 路径必然不存在 → None，但不能抛异常
-    check("darwin 查不到时返回 None", M.find_browser("darwin") is None,
-          str(M.find_browser("darwin")))
-    check("linux 查不到时返回 None", M.find_browser("linux") is None,
-          str(M.find_browser("linux")))
+    # 不能在别的平台上断言「一定查不到」：GitHub 的 macOS runner 预装了
+    # /Applications/Google Chrome.app，这条断言在云端 CI 上必然失败（本机是 Windows，
+    # 当初写的时候查不到才过的）。只验证返回值是 None 或真实存在的文件。
+    got_mac = M.find_browser("darwin")
+    check("darwin 分支能跑通（查到就是真实文件）",
+          got_mac is None or os.path.isfile(got_mac), str(got_mac))
+    got_lin = M.find_browser("linux")
+    check("linux 分支能跑通（查到就是真实文件）",
+          got_lin is None or os.path.isfile(got_lin), str(got_lin))
     got = M.find_browser()
     check("当前平台的探测不抛异常", got is None or os.path.isfile(got), str(got))
 

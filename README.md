@@ -182,6 +182,16 @@ PyMuPDF 2.x 也要 3.10+）。脚本会检查并提示；用 Homebrew / python.o
 打出来的包没签名，从网上传给别人后第一次打开要「右键 → 打开」，
 或 `xattr -dr com.apple.quarantine 文献精读助手.app`。
 
+**没有 Mac 也能打**：用 GitHub Actions 的 macOS 机器，配置在
+`.github/workflows/build-macos.yml`。推到 GitHub 后，仓库页面 → Actions →
+「打包 macOS 版」→ Run workflow，跑完在页面底部 Artifacts 下载。
+默认 `runs-on: macos-latest`（macOS 26 / Apple Silicon），产物是**纯 arm64**，
+M1~M4 可用；工作流里有一步 `lipo -archs` 校验，不是 arm64 会直接失败。
+Intel Mac 需要在 Intel runner 上单独打一份（如 `macos-15-intel`），不能混用。
+
+打包压缩必须用 `ditto -c -k --keepParent`，普通 `zip` 会丢掉 `.app` 里的符号链接和
+权限位，解压出来提示「已损坏」——工作流里已经这么写了，本机打包时同理。
+
 ### 踩过的坑（改代码前先看，别重复踩）
 
 **1. pywebview 的 `js_api` 对象不能暴露状态属性**
