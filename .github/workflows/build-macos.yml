@@ -3,6 +3,8 @@
 # 用法：仓库页面 → Actions → 左侧「打包 macOS 版」→ 右侧 Run workflow → 等 5~8 分钟
 #       → 点进这次运行 → 页面底部 Artifacts 里下载 文献精读助手-macOS-arm64
 #
+# 用的是 2026 年的 action 主版本（v7），v4 那批目标是 Node 20，会被强制跑在 Node 24 上并告警。
+#
 # 下载回来是一个 zip，里面还有一个 zip（文献精读助手-macOS-arm64.zip），
 # 解压两次得到 文献精读助手.app。之所以先在 mac 上用 ditto 压一次：
 # 普通 zip 会破坏 .app 内部的符号链接和权限位，解压出来是「已损坏」的包。
@@ -26,10 +28,10 @@ jobs:
 
     steps:
       - name: 取代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 装 Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -73,12 +75,29 @@ jobs:
           cd dist
           ditto -c -k --keepParent "文献精读助手.app" "文献精读助手-macOS-arm64.zip"
           ls -lh "文献精读助手-macOS-arm64.zip"
-          # 确认压缩包里确实有可执行文件，不是空壳
-          unzip -l "文献精读助手-macOS-arm64.zip" | grep -q "Contents/MacOS/LiteraReader" \
-            || { echo "::error::压缩包里没有可执行文件"; exit 1; }
+
+      - name: 校验压缩包能正常解开
+        run: |
+          # 别写 `unzip -l xxx.zip | grep -q "Contents/MacOS/LiteraReader"`：
+          # grep -q 一找到就退出，unzip 继续往里写会收到 SIGPIPE（退出码 141），
+          # 而 Actions 的 bash 带 pipefail，整条管道的状态就成了 141 ——
+          # 明明包是好的，却被判成「压缩包里没有可执行文件」。
+          # （第一次构建就是这么误报的：前面打包、架构校验全过了，卡在这一步。）
+          # 直接解开再测，顺便验证压缩包本身没坏。
+          rm -rf "$RUNNER_TEMP/verify"
+          mkdir -p "$RUNNER_TEMP/verify"
+          ditto -x -k "dist/文献精读助手-macOS-arm64.zip" "$RUNNER_TEMP/verify"
+          BIN="$RUNNER_TEMP/verify/文献精读助手.app/Contents/MacOS/LiteraReader"
+          if [ ! -x "$BIN" ]; then
+            echo "::error::解压后没有可执行文件，实际结构："
+            find "$RUNNER_TEMP/verify" -maxdepth 4
+            exit 1
+          fi
+          echo "OK：压缩包解开后结构正确"
+          rm -rf "$RUNNER_TEMP/verify"
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 文献精读助手-macOS-arm64
           path: dist/文献精读助手-macOS-arm64.zip
