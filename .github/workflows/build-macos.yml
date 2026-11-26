@@ -1,0 +1,86 @@
+# 在 GitHub 的 macOS 机器上打包「文献精读助手」（Apple Silicon / arm64）
+#
+# 用法：仓库页面 → Actions → 左侧「打包 macOS 版」→ 右侧 Run workflow → 等 5~8 分钟
+#       → 点进这次运行 → 页面底部 Artifacts 里下载 文献精读助手-macOS-arm64
+#
+# 下载回来是一个 zip，里面还有一个 zip（文献精读助手-macOS-arm64.zip），
+# 解压两次得到 文献精读助手.app。之所以先在 mac 上用 ditto 压一次：
+# 普通 zip 会破坏 .app 内部的符号链接和权限位，解压出来是「已损坏」的包。
+#
+# 为什么不用 macos-14：那个镜像 2026-11-02 已退役（GitHub 公告）。
+# 现在 macos-latest = macOS 26 / Apple Silicon；-large 后缀那种才是 Intel。
+# 下面的「校验架构」一步会打印 lipo 结果，不是 arm64 就直接 fail ——
+# 万一哪天 latest 变了，日志里一眼能看见，把 runs-on 改成 macos-15 即可。
+
+name: 打包 macOS 版
+
+on:
+  workflow_dispatch:          # 网页上手动点按钮
+  push:
+    branches: [main, master]  # 推代码也自动打一次，方便验证
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 取代码
+        uses: actions/checkout@v4
+
+      - name: 装 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt "pyinstaller>=6.0"
+          python -c "import pymupdf, PyInstaller, platform; \
+                     print('pymupdf', pymupdf.__version__, '| pyinstaller', PyInstaller.__version__, \
+                           '|', platform.machine())"
+
+      - name: 回归测试
+        run: |
+          python dev/test_parse.py
+          python dev/test_platform.py
+
+      - name: 打包
+        run: python -m PyInstaller build.spec --noconfirm
+
+      - name: 校验架构与体积
+        run: |
+          BIN="dist/文献精读助手.app/Contents/MacOS/LiteraReader"
+          if [ ! -x "$BIN" ]; then
+            echo "::error::没有产出可执行文件，检查 PyInstaller 日志"
+            exit 1
+          fi
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "可执行文件架构: $ARCHS"
+          du -sh "dist/文献精读助手.app"
+          # 只要纯 arm64：universal2 也能用，但体积翻倍，这里不需要
+          if [ "$ARCHS" = "arm64" ]; then
+            echo "OK：arm64，M 系列机器可以直接跑"
+          else
+            echo "::error::产物是 $ARCHS，不是 arm64，M4 装不上；把 runs-on 改成 macos-15 重试"
+            exit 1
+          fi
+
+      - name: 压成 zip（必须用 ditto）
+        run: |
+          cd dist
+          ditto -c -k --keepParent "文献精读助手.app" "文献精读助手-macOS-arm64.zip"
+          ls -lh "文献精读助手-macOS-arm64.zip"
+          # 确认压缩包里确实有可执行文件，不是空壳
+          unzip -l "文献精读助手-macOS-arm64.zip" | grep -q "Contents/MacOS/LiteraReader" \
+            || { echo "::error::压缩包里没有可执行文件"; exit 1; }
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: 文献精读助手-macOS-arm64
+          path: dist/文献精读助手-macOS-arm64.zip
+          if-no-files-found: error
+          retention-days: 30

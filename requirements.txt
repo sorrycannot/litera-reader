@@ -1,0 +1,17 @@
+# 运行依赖（打包时会一并打进去，使用者不需要装这些）
+#
+# 三个平台通用，装这两行就够：
+#     pip install -r requirements.txt
+#
+# 界面窗口用的是**系统自带的 Chrome/Edge**（--app 模式），不加载任何 GUI 框架，
+# 所以没有 tkinter / PyQt / pywebview 之类的东西。这一条很重要：
+#   · 中文路径不会崩（pythonnet 那套 .NET 加载器不支持非 ASCII 路径）
+#   · macOS 上不会拖进 PyObjC 一大堆（pywebview 的 mac 后端要用它）
+# 以前锁过 pywebview>=5.4,<6，那是旧方案留下的，已不再使用，注释保底。
+
+# PDF 抽取与版面解析（macOS 有 arm64 轮子）
+pymupdf>=2.0,<3
+
+# pywebview>=5.4,<6   # 已弃用，见上；保留这行是为了记住当年为什么锁 5.x：
+#                     # 6.2.1 在 Windows 上会递归遍历 js_api 属性，走进 .NET COM
+#                     # 对象后抛 Rectangle.op_Equality，把 UI 线程卡死。

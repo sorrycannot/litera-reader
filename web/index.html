@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文献精读助手</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ 首次启动引导 ============ -->
+<section id="view-setup" class="view">
+  <div class="setup-card">
+    <h1>文献精读助手</h1>
+    <p class="muted">先把两件事定下来，之后就不用再管了。</p>
+
+    <div class="step">
+      <div class="step-no">1</div>
+      <div class="step-body">
+        <h2>数据放在哪里</h2>
+        <p class="muted small">术语库、译文缓存、API 配置都存在这里。换电脑时把整个文件夹拷走就行。</p>
+        <div class="path-row">
+          <code id="setup-datadir">尚未选择</code>
+          <button class="btn" id="btn-setup-dir">选择文件夹</button>
+        </div>
+        <div class="path-row subtle">
+          <input id="setup-dir-manual" class="path-input" spellcheck="false"
+                 placeholder="对话框不方便用？直接把路径粘在这里，例如 D:\文献数据">
+          <button class="btn ghost" id="btn-setup-dir-apply">用这个位置</button>
+        </div>
+        <p id="setup-cloud-hint" class="warn small hidden"></p>
+        <p class="tiny muted">建议放本地磁盘，不要放 OneDrive、坚果云这类同步盘 —— 同步冲突会把数据库弄坏。</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-no">2</div>
+      <div class="step-body">
+        <h2>接入一个 AI 接口</h2>
+        <p class="muted small">先选服务商（地址和模型会自动填好），再给这套配置起个名字，最后粘贴密钥。</p>
+        <label class="field">
+          <span>服务商</span>
+          <select id="setup-provider"></select>
+        </label>
+        <p id="setup-provider-tip" class="tiny muted provider-tip"></p>
+        <div class="form-grid">
+          <label><span>名称 <b class="req">必填</b></span><input id="setup-name" placeholder="比如「百炼免费额度」"></label>
+          <label>接口地址<input id="setup-base" placeholder="选服务商后自动填"></label>
+          <label>密钥<input id="setup-key" type="password" placeholder="sk-..."></label>
+          <label>模型名<input id="setup-model" placeholder="选服务商后自动填"></label>
+        </div>
+        <div class="row gap">
+          <button class="btn" id="btn-setup-test">测试连接</button>
+          <span id="setup-test-result" class="small"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row end gap">
+      <button class="btn primary" id="btn-setup-finish">开始使用</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 首页 ============ -->
+<section id="view-home" class="view hidden">
+  <header class="topbar">
+    <div class="brand">文献精读助手</div>
+    <nav class="tabs">
+      <button class="tab active" data-view="home">文献</button>
+      <button class="tab" data-view="terms">术语库 <span id="tab-term-count" class="pill">0</span></button>
+      <button class="tab" data-view="cards">文献卡片 <span id="tab-card-count" class="pill">0</span></button>
+    </nav>
+    <div class="topbar-right">
+      <button class="btn ghost hidden" id="profile-badge">未配置 AI 接口</button>
+      <button class="btn ghost" id="btn-open-settings">设置</button>
+    </div>
+  </header>
+
+  <main class="home-main">
+    <div class="dropzone" id="dropzone">
+      <div class="dz-icon">PDF</div>
+      <h2>拖入 PDF，或点下面的按钮选择</h2>
+      <p class="muted small">英文文献效果最好。第一次打开一篇要等几十秒翻译，之后再看就走缓存，不花钱。</p>
+      <button class="btn primary" id="btn-pick-pdf">选择 PDF 文件</button>
+    </div>
+
+    <h3 class="section-title">最近打开</h3>
+    <div id="library-list" class="library-list"></div>
+  </main>
+</section>
+
+<!-- ============ 阅读页 ============ -->
+<section id="view-reader" class="view hidden">
+  <header class="topbar">
+    <button class="btn ghost" id="btn-back">返回</button>
+    <div class="doc-title" id="reader-title">—</div>
+    <div class="reader-tools">
+      <span id="reader-progress" class="progress-text"></span>
+      <button class="btn ghost" id="btn-original" title="按原始版面查看这一页，可放大、可前后翻页">原页</button>
+      <button class="btn ghost" id="btn-retranslate" title="清掉这篇的译文，用当前配置重翻一遍（会重新计费）">重新翻译</button>
+      <label class="switch"><input type="checkbox" id="chk-zh-only"><span>只看中文</span></label>
+      <div class="fontsize">
+        <button class="btn tiny" data-font="-1">A−</button>
+        <button class="btn tiny" data-font="1">A+</button>
+      </div>
+      <button class="btn ghost" id="btn-sidebar">术语</button>
+    </div>
+  </header>
+
+  <div class="progress-bar"><div id="progress-fill"></div></div>
+  <div id="reader-notice" class="reader-notice hidden"></div>
+
+  <div class="reader-body">
+    <article id="content" class="content"></article>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-head">
+        <strong>术语</strong>
+        <button class="btn tiny ghost" id="btn-close-sidebar">收起</button>
+      </div>
+      <div class="sidebar-hint muted tiny">这篇文献里的专业名词。点词条跳到它第一次出现的位置。</div>
+      <div id="sidebar-list" class="term-list"></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ 术语库 ============ -->
+<section id="view-terms" class="view hidden">
+  <header class="topbar">
+    <button class="btn ghost" data-back-home>返回</button>
+    <div class="doc-title">我的术语库</div>
+    <div class="row gap">
+      <input id="term-search" class="search" placeholder="搜索英文、中文或定义…">
+      <button class="btn" id="btn-export-terms">导出 CSV</button>
+      <button class="btn" id="btn-import-terms">导入 CSV</button>
+    </div>
+  </header>
+  <main class="page-main">
+    <div id="terms-list" class="terms-table"></div>
+  </main>
+</section>
+
+<!-- ============ 文献卡片 ============ -->
+<section id="view-cards" class="view hidden">
+  <header class="topbar">
+    <button class="btn ghost" data-back-home>返回</button>
+    <div class="doc-title">文献卡片</div>
+    <input id="card-search" class="search" placeholder="搜索研究问题、方法、结论…">
+  </header>
+  <main class="page-main">
+    <div id="cards-list" class="cards-grid"></div>
+  </main>
+</section>
+
+<!-- ============ 设置抽屉 ============ -->
+<div id="settings" class="drawer hidden">
+  <div class="drawer-head">
+    <strong>设置</strong>
+    <button class="btn tiny ghost" id="btn-close-settings">关闭</button>
+  </div>
+  <div class="drawer-body">
+    <h3>AI 接口</h3>
+    <p class="muted tiny">最多存 5 套。翻译时用的是「当前使用」那一套。</p>
+
+    <label class="field">
+      <span>当前使用<em class="field-hint">翻译时实际调用的那一套</em></span>
+      <select id="profile-select"></select>
+    </label>
+
+    <label class="field">
+      <span>服务商<em class="field-hint">选了自动填地址和模型；手动改地址会切到「其他」</em></span>
+      <select id="pf-provider"></select>
+    </label>
+    <p id="pf-provider-tip" class="tiny muted provider-tip"></p>
+
+    <div class="form-grid">
+      <label><span>名称 <b class="req">必填</b></span><input id="pf-name" placeholder="比如「百炼免费额度」"></label>
+      <label>接口地址<input id="pf-base" placeholder="https://api.deepseek.com"></label>
+      <label>密钥<input id="pf-key" type="password" placeholder="sk-..."></label>
+      <label>模型名<input id="pf-model" placeholder="qwen-plus"></label>
+    </div>
+
+    <div class="row gap wrap">
+      <button class="btn primary" id="btn-save-profile">保存这套</button>
+      <button class="btn" id="btn-test-profile">测试连接</button>
+      <button class="btn" id="btn-new-profile">清空表单/新建</button>
+      <button class="btn danger-ghost" id="btn-delete-profile">删除这套</button>
+    </div>
+    <p id="pf-test-result" class="small"></p>
+
+    <hr>
+
+    <h3>数据目录</h3>
+    <div class="path-row">
+      <code id="settings-datadir">—</code>
+      <button class="btn" id="btn-change-dir">更换</button>
+      <button class="btn" id="btn-open-dir">打开</button>
+    </div>
+    <div class="path-row subtle">
+      <input id="settings-dir-manual" class="path-input" spellcheck="false"
+             placeholder="对话框不方便用？直接把路径粘在这里">
+      <button class="btn ghost" id="btn-settings-dir-apply">用这个位置</button>
+    </div>
+    <p class="muted tiny">换目录时会把现有的术语库和译文缓存一起搬过去。数据只存在本机，不上传。</p>
+  </div>
+</div>
+
+<!-- 划词浮层 -->
+<div id="popover" class="popover hidden">
+  <div class="pop-head">
+    <strong id="pop-word"></strong>
+    <span id="pop-zh" class="pop-zh"></span>
+    <button class="pop-close" id="pop-close">×</button>
+  </div>
+  <div id="pop-def" class="pop-def"></div>
+</div>
+
+<!-- 原页/插图放大。整页模式可以翻页：读到一段觉得排版对不上，
+     直接按 ← → 前后翻原页比来回滚动快得多 -->
+<div id="lightbox" class="lightbox hidden">
+  <div class="lb-stage" id="lb-stage">
+    <img id="lightbox-img" alt="原页" draggable="false">
+    <div id="lb-loading" class="lb-loading hidden">正在取原页…</div>
+  </div>
+  <div class="lightbox-bar">
+    <button class="btn tiny" id="lb-prev" title="上一页（←）">‹ 上一页</button>
+    <span id="lightbox-tip" class="tiny"></span>
+    <button class="btn tiny" id="lb-next" title="下一页（→）">下一页 ›</button>
+    <span class="lb-divider"></span>
+    <button class="btn tiny" id="lb-zoom-out" title="缩小（-）">−</button>
+    <span id="lb-zoom" class="lb-zoom-text">100%</span>
+    <button class="btn tiny" id="lb-zoom-in" title="放大（+）">+</button>
+    <button class="btn tiny" id="lb-fit" title="回到适应窗口（0）">适应窗口</button>
+    <button class="btn tiny" id="lightbox-close">关闭</button>
+  </div>
+</div>
+
+<!-- 通用确认框：删除这类不可逆操作要让人看清再做 -->
+<div id="confirm" class="modal hidden">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h3 id="confirm-title">确认</h3>
+    <p id="confirm-body" class="modal-body"></p>
+    <div id="confirm-actions" class="modal-actions"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

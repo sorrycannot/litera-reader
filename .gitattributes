@@ -1,0 +1,18 @@
+# 统一换行：仓库里一律 LF。
+# Windows 上默认 core.autocrlf=true，检出时会把 .sh 变成 CRLF，
+# 到了 macOS 就报 "/usr/bin/env: bad interpreter: No such file or directory"。
+* text=auto eol=lf
+
+# 二进制文件不要做换行转换
+*.woff2 binary
+*.woff binary
+*.ttf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.exe binary
+*.icns binary
+
+# 脚本在 macOS 上要能直接执行
+*.sh text eol=lf

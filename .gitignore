@@ -1,0 +1,32 @@
+# 构建产物（体积大，每次打包都重新生成，不需要进仓库）
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv-mac/
+*.egg-info/
+
+# 运行时产物
+startup.log
+*.log
+out/
+
+# WorkBuddy 项目数据（开发日志/记忆，属于本机私有）
+.workbuddy/
+
+# 开发时临时渲染的图与临时文件（dev/_xxx.png、dev/_port.txt）
+dev/_*.png
+dev/_*.json
+dev/_*.txt
+# 开发时无头浏览器截的界面图，只用于当时核对排版
+dev/ui_*.png
+dev/selftest.png
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
