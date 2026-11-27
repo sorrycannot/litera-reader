@@ -299,6 +299,70 @@ def main():
     finally:
         subprocess.run = orig_run2
 
+    print("\n== 11. 打包后的 HTTPS 根证书（这是「连不上 API」最常见的原因）")
+    import ssl as _ssl
+
+    import app.llm as L
+
+    # 本机（Windows）能枚举系统证书存储 → 必须返回 None，也就是完全不动原有行为
+    L._SSL_CTX_DONE = False
+    L._SSL_CTX = None
+    check("默认就有根证书时返回 None（不干预）", L._ssl_context() is None,
+          str(L._ssl_context()))
+    check("本机默认 context 确实有根证书",
+          _ssl.create_default_context().cert_store_stats().get("x509", 0) > 0)
+
+    # 模拟打包后的 macOS：默认 context 里一个 CA 都没有
+    orig_ctx = _ssl.create_default_context
+
+    class _EmptyCtx:
+        def cert_store_stats(self):
+            return {"x509": 0, "crl": 0, "x509_ca": 0}
+
+    def fake_ctx(*a, **kw):
+        if kw.get("cafile"):        # certifi 那一次要放行，别的都当成空 context
+            return orig_ctx(*a, **kw)
+        return _EmptyCtx()
+
+    _ssl.create_default_context = fake_ctx
+    try:
+        L._SSL_CTX_DONE = False
+        L._SSL_CTX = None
+        ctx = L._ssl_context()
+    finally:
+        _ssl.create_default_context = orig_ctx
+    check("没有默认根证书时改用 certifi 的 CA", ctx is not None, str(ctx))
+    if ctx is not None:
+        check("certifi 的 context 里确实有根证书",
+              ctx.cert_store_stats().get("x509", 0) > 20, str(ctx.cert_store_stats()))
+
+    # 调用链：这一路必须把 context 传进 urlopen，否则上面的兜底等于白做
+    captured = {}
+
+    class _FakeResp:
+        def read(self):
+            return b'{"ok": true}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, **kw):
+        captured.update(kw)
+        return _FakeResp()
+
+    L._SSL_CTX_DONE = False
+    L._SSL_CTX = None
+    orig_open = L.urllib.request.urlopen
+    L.urllib.request.urlopen = fake_urlopen
+    try:
+        L._post_json("https://example.invalid/v1/chat/completions", {}, {}, 5)
+    finally:
+        L.urllib.request.urlopen = orig_open
+    check("_post_json 把 context 传给了 urlopen", "context" in captured, str(list(captured)))
+
     print(f"\n结果：{passed} 通过 / {failed} 失败")
     return 0 if failed == 0 else 1
 

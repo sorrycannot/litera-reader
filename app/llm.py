@@ -17,9 +17,58 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
+
+
+# ---------------- HTTPS 根证书 ----------------
+#
+# Windows 版一直没这问题：CPython 在 Windows 上直接从**系统证书存储**取根证书
+# （ssl.load_default_certs 走 enum_certificates("ROOT")），不需要任何额外文件。
+#
+# macOS 打包后就不行了：
+#   · 没有可枚举的系统证书存储；
+#   · OpenSSL 的默认 CA 路径写死在打包时那份 Python 的
+#     `.../etc/openssl/cert.pem`，在用户机器上根本不存在。
+# 结果 context 里一个 CA 都没有，所有 HTTPS 请求都抛
+# `CERTIFICATE_VERIFY_FAILED` —— 界面上显示的就是"连不上服务器 / 测试连接失败"，
+# 看起来像网络问题，其实跟网络一点关系没有。
+#
+# 处理办法：启动后第一次发请求前探测一次。
+#   · 默认 context 里已经有根证书（Windows 就是这样，80 个）→ 返回 None，走原来的路，
+#     行为一个字都不变；
+#   · 一个都没有（打包后的 macOS）→ 改用随程序分发的 certifi CA 列表（113 个）。
+# 探测结果缓存，不重复算。
+
+_SSL_CTX: ssl.SSLContext | None = None
+_SSL_CTX_DONE = False
+
+
+def _ssl_context() -> ssl.SSLContext | None:
+    """
+    返回要用的 SSL context；返回 None 表示「用 urllib 默认的」。
+    """
+    global _SSL_CTX, _SSL_CTX_DONE
+    if _SSL_CTX_DONE:
+        return _SSL_CTX
+    _SSL_CTX_DONE = True
+
+    try:
+        default = ssl.create_default_context()
+        if default.cert_store_stats().get("x509", 0) > 0:
+            _SSL_CTX = None          # 默认就有根证书，别动它
+            return None
+    except Exception:
+        pass
+
+    try:
+        import certifi
+        _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        _SSL_CTX = None              # certifi 也没了，只能听天由命
+    return _SSL_CTX
 
 DEFAULT_TIMEOUT = 180
 DEFAULT_MAX_TOKENS = 4096
@@ -112,8 +161,11 @@ def _classify_http(status: int, body: str) -> LLMError:
 def _post_json(url: str, headers: dict, payload: dict, timeout: float):
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    # ctx 为 None 时 urlopen 走默认处理（Windows 就是这样）；
+    # 打包后的 macOS 上会拿到 certifi 的 context，否则 HTTPS 必然验签失败。
+    ctx = _ssl_context()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as e:
         raise _classify_http(e.code, e.read().decode("utf-8", errors="replace"))

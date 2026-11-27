@@ -30,12 +30,25 @@ PyInstaller **不能交叉编译**：要 Mac 版就得在 Mac 上跑一次，Win
 
 import sys
 
+from PyInstaller.utils.hooks import collect_data_files
+
+# web 目录是界面本体，必须带（不然打开是白屏）。
+_datas = [('web', 'web')]
+
+# certifi 的 cacert.pem：macOS 打包后系统根证书不可用，靠这个文件兜底
+# （见 app/llm.py 的 _ssl_context）。PyInstaller 自带的 hook-certifi 也会收集，
+# 这里再显式收一次，避免 hook 版本差异导致漏文件 —— 漏了的表现就是「连不上服务器」。
+try:
+    _datas += collect_data_files('certifi')
+except Exception:
+    pass
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[('web', 'web')],
-    hiddenimports=[],
+    datas=_datas,
+    hiddenimports=['certifi'],
     hookspath=[],
     runtime_hooks=[],
     excludes=[

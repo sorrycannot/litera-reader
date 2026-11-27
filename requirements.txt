@@ -12,6 +12,12 @@
 # PDF 抽取与版面解析（macOS 有 arm64 轮子）
 pymupdf>=2.0,<3
 
+# HTTPS 根证书。
+# Windows 不需要它（CPython 直接读系统证书存储），但 macOS 打包后既没有可枚举的
+# 证书存储，OpenSSL 的默认 CA 路径又指向打包时那份 Python 的 etc/openssl/cert.pem
+# —— 在用户机器上不存在。没有它，所有 API 请求都会 CERTIFICATE_VERIFY_FAILED。
+certifi>=2024.0
+
 # pywebview>=5.4,<6   # 已弃用，见上；保留这行是为了记住当年为什么锁 5.x：
 #                     # 6.2.1 在 Windows 上会递归遍历 js_api 属性，走进 .NET COM
 #                     # 对象后抛 Rectangle.op_Equality，把 UI 线程卡死。
