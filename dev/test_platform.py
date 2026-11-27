@@ -304,13 +304,20 @@ def main():
 
     import app.llm as L
 
-    # 本机（Windows）能枚举系统证书存储 → 必须返回 None，也就是完全不动原有行为
+    # 注意：**不能断言"本机默认一定有根证书"**。
+    # Windows 有系统证书存储（80 个），但 GitHub 的 macOS runner 上那份 python.org
+    # Python 没跑过 Install Certificates.command，默认 context 可能是 0 个 CA ——
+    # 于是这个模块自己会走 certifi 分支。两种结果都是对的，只能按实际探测结果分支断言。
+    # （上一版就是硬断言 is None，在云端必然红，和之前 find_browser 那次是同一类错。）
+    default_ca = _ssl.create_default_context().cert_store_stats().get("x509", 0)
     L._SSL_CTX_DONE = False
     L._SSL_CTX = None
-    check("默认就有根证书时返回 None（不干预）", L._ssl_context() is None,
-          str(L._ssl_context()))
-    check("本机默认 context 确实有根证书",
-          _ssl.create_default_context().cert_store_stats().get("x509", 0) > 0)
+    got = L._ssl_context()
+    if default_ca > 0:
+        check(f"默认已有根证书（{default_ca} 个）→ 不干预，返回 None", got is None, str(got))
+    else:
+        check("默认没有根证书 → 改用 certifi，且里面确有 CA",
+              got is not None and got.cert_store_stats().get("x509", 0) > 20, str(got))
 
     # 模拟打包后的 macOS：默认 context 里一个 CA 都没有
     orig_ctx = _ssl.create_default_context
